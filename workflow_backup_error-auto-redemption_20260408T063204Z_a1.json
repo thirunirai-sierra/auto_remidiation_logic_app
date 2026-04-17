@@ -1,0 +1,225 @@
+{
+  "properties": {
+    "provisioningState": "Succeeded",
+    "createdTime": "2026-04-07T06:03:40.5229983Z",
+    "changedTime": "2026-04-08T05:24:05.6482367Z",
+    "state": "Enabled",
+    "version": "08584259810398457769",
+    "accessEndpoint": "https://prod-15.northcentralus.logic.azure.com:443/workflows/da46f8c21619485b84bb665c7de97f6c",
+    "definition": {
+      "metadata": {
+        "notes": {}
+      },
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        }
+      },
+      "triggers": {
+        "When_an_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http"
+        }
+      },
+      "actions": {
+        "Main_Process": {
+          "actions": {
+            "HTTP": {
+              "type": "Http",
+              "inputs": {
+                "uri": "https://invalid-api-test.com/data",
+                "method": "GET"
+              },
+              "runtimeConfiguration": {
+                "contentTransfer": {
+                  "transferMode": "Chunked"
+                }
+              }
+            }
+          },
+          "runAfter": {},
+          "type": "Scope"
+        },
+        "Error_handler": {
+          "actions": {
+            "Compose": {
+              "type": "Compose",
+              "inputs": "@result('Main_Process')"
+            },
+            "Condition": {
+              "actions": {
+                "Auto_redemption": {
+                  "type": "Http",
+                  "inputs": {
+                    "uri": "https://prod-15.northcentralus.logic.azure.com:443/workflows/da46f8c21619485b84bb665c7de97f6c/triggers/When_an_HTTP_request_is_received/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=B6QtyCbMhVc1hsKbKcOS8uW3ClaMsZKnzBeTYarlwiQ",
+                    "method": "POST"
+                  },
+                  "runtimeConfiguration": {
+                    "contentTransfer": {
+                      "transferMode": "Chunked"
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Compose": [
+                  "Succeeded"
+                ]
+              },
+              "else": {
+                "actions": {
+                  "Compose_1": {
+                    "type": "Compose",
+                    "inputs": "Other error occurred"
+                  }
+                }
+              },
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "",
+                      ""
+                    ]
+                  }
+                ]
+              },
+              "type": "If"
+            }
+          },
+          "runAfter": {
+            "Main_Process": [
+              "TimedOut",
+              "Succeeded",
+              "Failed",
+              "Skipped"
+            ]
+          },
+          "type": "Scope",
+          "description": ""
+        }
+      },
+      "outputs": {}
+    },
+    "parameters": {
+      "$connections": {
+        "value": {}
+      }
+    },
+    "endpointsConfiguration": {
+      "workflow": {
+        "outgoingIpAddresses": [
+          {
+            "address": "52.162.177.30"
+          },
+          {
+            "address": "23.101.167.207"
+          },
+          {
+            "address": "20.80.33.190"
+          },
+          {
+            "address": "20.88.47.77"
+          },
+          {
+            "address": "172.183.51.180"
+          },
+          {
+            "address": "40.116.65.125"
+          },
+          {
+            "address": "20.88.51.31"
+          },
+          {
+            "address": "40.116.66.226"
+          },
+          {
+            "address": "40.116.64.218"
+          },
+          {
+            "address": "20.88.55.77"
+          },
+          {
+            "address": "172.183.49.208"
+          },
+          {
+            "address": "20.102.251.70"
+          },
+          {
+            "address": "20.102.255.252"
+          },
+          {
+            "address": "20.88.49.23"
+          },
+          {
+            "address": "172.183.50.30"
+          },
+          {
+            "address": "20.88.49.21"
+          },
+          {
+            "address": "20.102.255.209"
+          },
+          {
+            "address": "172.183.48.255"
+          }
+        ],
+        "accessEndpointIpAddresses": [
+          {
+            "address": "20.98.61.245"
+          },
+          {
+            "address": "172.183.50.180"
+          },
+          {
+            "address": "172.183.52.146"
+          },
+          {
+            "address": "172.183.51.138"
+          },
+          {
+            "address": "172.183.48.31"
+          },
+          {
+            "address": "172.183.48.9"
+          },
+          {
+            "address": "172.183.48.234"
+          },
+          {
+            "address": "40.116.65.34"
+          }
+        ]
+      },
+      "connector": {
+        "outgoingIpAddresses": [
+          {
+            "address": "52.162.126.4"
+          },
+          {
+            "address": "52.162.242.161"
+          },
+          {
+            "address": "52.162.107.160/28"
+          },
+          {
+            "address": "52.162.111.192/27"
+          },
+          {
+            "address": "20.51.4.192/27"
+          },
+          {
+            "address": "20.51.4.224/28"
+          }
+        ]
+      }
+    }
+  },
+  "id": "/subscriptions/a17ef9e4-90e3-44ba-b4c2-1e3aa765de09/resourceGroups/error-detect-flow_group/providers/Microsoft.Logic/workflows/error-auto-redemption",
+  "name": "error-auto-redemption",
+  "type": "Microsoft.Logic/workflows",
+  "location": "northcentralus"
+}
