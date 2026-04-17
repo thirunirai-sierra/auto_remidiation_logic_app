@@ -21,7 +21,10 @@ import time
 
 from logic_app_remediator.agent import run_remediation
 from logic_app_remediator.config import get_settings
-from logic_app_remediator.multi_flow_runner import process_failed_runs
+from logic_app_remediator.multi_flow_runner import (
+    collect_failed_run_errors,
+    process_failed_runs,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -95,6 +98,11 @@ def main(argv: list[str] | None = None) -> int:
         default=0,
         help="If >0 with --all-flows, repeat scan every N minutes (simple loop; use systemd/cron in prod)",
     )
+    mf.add_argument(
+        "--log-only",
+        action="store_true",
+        help="Only read and display failed runs/errors from Log Analytics; do not run remediation.",
+    )
 
     args = p.parse_args(argv)
 
@@ -111,6 +119,13 @@ def main(argv: list[str] | None = None) -> int:
             p.error("--workspace-id or LOG_ANALYTICS_WORKSPACE_ID is required with --all-flows")
 
         def _run_batch() -> dict:
+            if args.log_only:
+                return collect_failed_run_errors(
+                    workspace_id=ws,
+                    hours=args.hours,
+                    top_n=args.top_n,
+                    settings=settings,
+                )
             return process_failed_runs(
                 subscription_id=args.subscription_id,
                 resource_group=args.resource_group,

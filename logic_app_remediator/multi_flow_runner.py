@@ -28,13 +28,56 @@ from logic_app_remediator.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
-# Default Kusto query (time window and row cap parameterized below).
+# Schema probe query (requested) + robust failed-runs query.
+_SCHEMA_PROBE_KUSTO = "AzureDiagnostics | take 1"
+
+# Robust query: avoid hardcoded columns by using column_ifexists and _ResourceId parsing.
 _BASE_KUSTO = """
 AzureDiagnostics
-| where ResourceType == "WORKFLOWS/RUNS"
-| where status_s == "Failed"
+| extend _rid = tostring(column_ifexists("_ResourceId", ""))
+| extend _resourceType = toupper(tostring(column_ifexists("ResourceType", "")))
+| extend _status = tostring(column_ifexists("status_s", column_ifexists("Status_s", column_ifexists("status", column_ifexists("Status", "")))))
+| extend _workflow =
+    tostring(
+        coalesce(
+            column_ifexists("resource_workflowName_s", ""),
+            column_ifexists("workflowName_s", ""),
+            column_ifexists("workflowName", ""),
+            extract(@"/workflows/([^/]+)", 1, _rid)
+        )
+    )
+| extend _runId =
+    tostring(
+        coalesce(
+            column_ifexists("resource_runId_s", ""),
+            column_ifexists("runId_s", ""),
+            column_ifexists("runId", ""),
+            extract(@"/runs/([^/]+)", 1, _rid)
+        )
+    )
+| extend _error_message =
+    tostring(
+        coalesce(
+            column_ifexists("error_message_s", ""),
+            column_ifexists("ErrorMessage", ""),
+            column_ifexists("message", ""),
+            column_ifexists("Message", "")
+        )
+    )
+| extend _error_code =
+    tostring(
+        coalesce(
+            column_ifexists("error_code_s", ""),
+            column_ifexists("ErrorCode", ""),
+            column_ifexists("code", ""),
+            column_ifexists("Code", "")
+        )
+    )
 | where TimeGenerated > ago({hours}h)
-| project workflowName_s, resource_runId_s, TimeGenerated
+| where _status =~ "Failed"
+| where _resourceType == "WORKFLOWS/RUNS" or _rid has "/providers/microsoft.logic/workflows/" and _rid has "/runs/"
+| where isnotempty(_workflow) and isnotempty(_runId)
+| project TimeGenerated, _ResourceId=_rid, workflow_name=_workflow, run_id=_runId, error_code_s=_error_code, error_message_s=_error_message
 | order by TimeGenerated desc
 | take {top_n}
 """
@@ -60,12 +103,28 @@ def _credential_for_logs(settings: Settings):
 
 def _row_to_dict(table: Any, row: Any) -> Dict[str, Any]:
     """Convert a Logs table row to a dict keyed by column name."""
-    names = [c.name for c in table.columns]
+    names: List[str] = []
+    for c in table.columns:
+        if isinstance(c, str):
+            names.append(c)
+        else:
+            names.append(getattr(c, "name", str(c)))
     if hasattr(row, "__iter__") and not isinstance(row, (str, bytes, dict)):
         return {names[i]: row[i] for i in range(min(len(names), len(row)))}
     if isinstance(row, dict):
         return row
     return {}
+
+
+def _column_names(table: Any) -> List[str]:
+    """Return column names across azure-monitor-query SDK variants."""
+    names: List[str] = []
+    for c in getattr(table, "columns", []) or []:
+        if isinstance(c, str):
+            names.append(c)
+        else:
+            names.append(getattr(c, "name", str(c)))
+    return names
 
 
 def query_failed_runs_from_workspace(
@@ -90,6 +149,15 @@ def query_failed_runs_from_workspace(
         hours,
     )
     try:
+        # Schema probe (requested): helps debugging schema drift across workspaces.
+        schema_probe = client.query_workspace(
+            workspace_id=workspace_id,
+            query=_SCHEMA_PROBE_KUSTO,
+            timespan=timespan,
+        )
+        if schema_probe.tables:
+            cols = _column_names(schema_probe.tables[0])
+            logger.info("AzureDiagnostics probe columns: %s", ", ".join(cols))
         response = client.query_workspace(
             workspace_id=workspace_id,
             query=query,
@@ -117,40 +185,59 @@ def query_failed_runs_from_workspace(
     return rows_out
 
 
-def _normalize_row(row: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+def _normalize_row(row: Dict[str, Any]) -> Optional[Tuple[str, str, str]]:
     """
-    Extract (workflow_name, run_id) from a query row.
-    Column names may vary slightly; try common variants.
+    Extract (workflow_name, run_id, error_message_s) from a query row.
+    Supports robust query aliases and a few legacy variants.
     """
     wf = (
-        row.get("workflowName_s")
+        row.get("workflow_name")
+        or row.get("resource_workflowName_s")
+        or row.get("workflowName_s")
         or row.get("workflowName")
         or row.get("WorkflowName_s")
     )
     rid = (
-        row.get("resource_runId_s")
+        row.get("run_id")
+        or row.get("resource_runId_s")
         or row.get("resource_runId")
         or row.get("Resource_runId_s")
     )
+    err_msg = row.get("error_message_s") or row.get("error_message")
     if wf is None or rid is None:
         return None
     wf_s, rid_s = str(wf).strip(), str(rid).strip()
     if not wf_s or not rid_s:
         return None
-    return wf_s, rid_s
+    return wf_s, rid_s, str(err_msg or "")
 
 
 def _summarize_remediation_result(
-    workflow: str, run_id: str, result: Dict[str, Any]
+    workflow: str, run_id: str, log_error_message: str, result: Dict[str, Any]
 ) -> Dict[str, Any]:
     """Shape one row for the consolidated JSON report."""
+    exact_error_message = result.get("exact_error_message", "") or ""
+    exact_error_code = result.get("exact_error_code", "") or ""
+    exact_error_in_flow = result.get("exact_error_in_flow", "") or ""
+    # Prefer RAG/live-flow statement, then code + message, then message.
+    if exact_error_in_flow:
+        exact_error = exact_error_in_flow
+    elif exact_error_code and exact_error_message:
+        exact_error = f"{exact_error_code}: {exact_error_message}"
+    else:
+        exact_error = exact_error_message
+
     return {
         "workflow": workflow,
         "run_id": run_id,
+        "log_error_code_s": result.get("log_error_code_s", ""),
+        "log_error_message_s": log_error_message,
         "status": result.get("status", ""),
         "error_type": result.get("error_type", ""),
-        "exact_error_code": result.get("exact_error_code", ""),
-        "exact_error_message": result.get("exact_error_message", ""),
+        "exact_error": exact_error,
+        "exact_error_in_flow": exact_error_in_flow,
+        "exact_error_code": exact_error_code,
+        "exact_error_message": exact_error_message,
         "root_cause": result.get("root_cause", ""),
         "fix_applied": result.get("fix_applied", ""),
         "recommendation": result.get("recommendation", ""),
@@ -224,22 +311,25 @@ def process_failed_runs(
 
     # De-duplicate (workflow, run_id) while preserving newest-first order from query.
     seen: Set[Tuple[str, str]] = set()
-    tasks: List[Tuple[str, str]] = []
+    tasks: List[Tuple[str, str, str, str]] = []
     for row in rows:
         parsed = _normalize_row(row)
         if not parsed:
             logger.debug("Skipping unparsable row: %s", row)
             continue
-        key = parsed
+        wf, rid, log_msg = parsed
+        log_code = str(row.get("error_code_s") or row.get("error_code") or "")
+        key = (wf, rid)
         if key in seen:
             continue
         seen.add(key)
-        tasks.append(parsed)
-        wf, rid = parsed
+        tasks.append((wf, rid, log_msg, log_code))
         logger.info(
-            "Detected failed run from logs: workflowName_s=%s resource_runId_s=%s",
+            "Detected failed run from logs: workflow=%s run_id=%s error_code_s=%s error_message_s=%s",
             wf,
             rid,
+            log_code,
+            log_msg,
         )
 
     total_failed = len(tasks)
@@ -273,16 +363,18 @@ def process_failed_runs(
 
     workers = max(1, int(max_concurrency))
     if workers == 1 or total_failed <= 1:
-        for wf, rid in tasks:
+        for wf, rid, log_msg, log_code in tasks:
             out = _one(wf, rid)
-            results.append(_summarize_remediation_result(wf, rid, out))
+            out = dict(out)
+            out.setdefault("log_error_code_s", log_code)
+            results.append(_summarize_remediation_result(wf, rid, log_msg, out))
     else:
         with ThreadPoolExecutor(max_workers=workers) as pool:
             future_map = {
-                pool.submit(_one, wf, rid): (wf, rid) for wf, rid in tasks
+                pool.submit(_one, wf, rid): (wf, rid, log_msg, log_code) for wf, rid, log_msg, log_code in tasks
             }
             for fut in as_completed(future_map):
-                wf, rid = future_map[fut]
+                wf, rid, log_msg, log_code = future_map[fut]
                 try:
                     out = fut.result()
                 except Exception as ex:
@@ -295,13 +387,76 @@ def process_failed_runs(
                         "recommendation": "",
                         "detail": str(ex),
                     }
-                results.append(_summarize_remediation_result(wf, rid, out))
+                out = dict(out)
+                out.setdefault("log_error_code_s", log_code)
+                results.append(_summarize_remediation_result(wf, rid, log_msg, out))
 
     # Preserve deterministic order by workflow + run_id for reporting
     results.sort(key=lambda x: (x.get("workflow") or "", x.get("run_id") or ""))
 
     return {
         "total_failed_runs": total_failed,
+        "processed": len(results),
+        "results": results,
+    }
+
+
+def collect_failed_run_errors(
+    *,
+    workspace_id: str,
+    hours: int = 1,
+    top_n: int = 100,
+    settings: Optional[Settings] = None,
+) -> Dict[str, Any]:
+    """
+    Log-only mode: read failed runs from AzureDiagnostics and display error fields
+    without invoking run_remediation().
+    """
+    settings = settings or get_settings()
+    try:
+        rows = query_failed_runs_from_workspace(
+            workspace_id=workspace_id, hours=hours, top_n=top_n, settings=settings
+        )
+    except Exception as ex:
+        logger.error("Failed to query Log Analytics: %s", ex)
+        return {
+            "total_failed_runs": 0,
+            "processed": 0,
+            "results": [],
+            "status": "log_query_failed",
+            "detail": str(ex),
+        }
+
+    seen: Set[Tuple[str, str]] = set()
+    results: List[Dict[str, Any]] = []
+    for row in rows:
+        parsed = _normalize_row(row)
+        if not parsed:
+            continue
+        wf, rid, msg = parsed
+        key = (wf, rid)
+        if key in seen:
+            continue
+        seen.add(key)
+        logger.info(
+            "Detected failed run from logs: workflow=%s run_id=%s error_message_s=%s",
+            wf,
+            rid,
+            msg,
+        )
+        log_code = str(row.get("error_code_s") or row.get("error_code") or "")
+        results.append(
+            {
+                "workflow": wf,
+                "run_id": rid,
+                "log_error_code_s": log_code,
+                "log_error_message_s": msg,
+                "status": "detected_from_logs",
+            }
+        )
+
+    return {
+        "total_failed_runs": len(results),
         "processed": len(results),
         "results": results,
     }
