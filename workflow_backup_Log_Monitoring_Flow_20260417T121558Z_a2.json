@@ -1,0 +1,185 @@
+{
+  "properties": {
+    "provisioningState": "Succeeded",
+    "createdTime": "2026-04-13T05:02:04.3176339Z",
+    "changedTime": "2026-04-17T12:16:02.1325746Z",
+    "state": "Disabled",
+    "version": "08584251787233578528",
+    "accessEndpoint": "https://prod-06.southindia.logic.azure.com:443/workflows/728c803af2734e67a82f27556b0f1b4b",
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        }
+      },
+      "triggers": {
+        "When_an_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "log": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "actions": {
+        "Condition": {
+          "actions": {
+            "Send_an_email_(V2)": {
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['office365']['connectionId']"
+                  }
+                },
+                "method": "post",
+                "body": {
+                  "To": "a.palanichamy@sierradigitalinc.com",
+                  "Subject": "\u26a0\ufe0f Error Detected in System Logs",
+                  "Body": "<p class=\"editor-paragraph\">An ERROR was found in logs:<br><br>@{triggerBody()?['log']}</p>",
+                  "Importance": "Normal"
+                },
+                "path": "/v2/Mail"
+              }
+            }
+          },
+          "runAfter": {},
+          "else": {
+            "actions": {
+              "Compose": {
+                "type": "Compose",
+                "inputs": "No issues detected in logs"
+              }
+            }
+          },
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@contains(triggerBody()?['log'], 'ERROR')",
+                  true
+                ]
+              }
+            ]
+          },
+          "type": "If"
+        }
+      },
+      "outputs": {}
+    },
+    "parameters": {
+      "$connections": {
+        "type": "Object",
+        "value": {
+          "office365": {
+            "id": "/subscriptions/c474dc7c-4f50-490b-a886-847fad508a71/providers/Microsoft.Web/locations/southindia/managedApis/office365",
+            "connectionId": "/subscriptions/c474dc7c-4f50-490b-a886-847fad508a71/resourceGroups/logicapp-rg/providers/Microsoft.Web/connections/office365",
+            "connectionName": "office365",
+            "connectionProperties": {}
+          }
+        }
+      }
+    },
+    "endpointsConfiguration": {
+      "workflow": {
+        "outgoingIpAddresses": [
+          {
+            "address": "104.211.210.192"
+          },
+          {
+            "address": "104.211.218.202"
+          },
+          {
+            "address": "52.172.101.114"
+          },
+          {
+            "address": "52.172.101.181"
+          },
+          {
+            "address": "52.140.5.116"
+          },
+          {
+            "address": "52.172.98.23"
+          },
+          {
+            "address": "52.140.2.252"
+          },
+          {
+            "address": "52.140.0.225"
+          },
+          {
+            "address": "52.140.7.114"
+          },
+          {
+            "address": "52.172.101.204"
+          }
+        ],
+        "accessEndpointIpAddresses": [
+          {
+            "address": "52.140.4.233"
+          },
+          {
+            "address": "52.172.100.99"
+          },
+          {
+            "address": "52.140.5.154"
+          },
+          {
+            "address": "52.140.1.153"
+          },
+          {
+            "address": "52.172.96.103"
+          },
+          {
+            "address": "52.140.2.150"
+          },
+          {
+            "address": "52.172.103.116"
+          },
+          {
+            "address": "52.172.99.31"
+          }
+        ]
+      },
+      "connector": {
+        "outgoingIpAddresses": [
+          {
+            "address": "13.71.127.26"
+          },
+          {
+            "address": "13.71.125.22"
+          },
+          {
+            "address": "20.192.184.32/27"
+          },
+          {
+            "address": "40.78.194.240/28"
+          },
+          {
+            "address": "20.192.152.64/27"
+          },
+          {
+            "address": "20.192.152.96/28"
+          },
+          {
+            "address": "52.172.80.0/26"
+          }
+        ]
+      }
+    }
+  },
+  "id": "/subscriptions/c474dc7c-4f50-490b-a886-847fad508a71/resourceGroups/logicapp-rg/providers/Microsoft.Logic/workflows/Log_Monitoring_Flow",
+  "name": "Log_Monitoring_Flow",
+  "type": "Microsoft.Logic/workflows",
+  "location": "southindia"
+}

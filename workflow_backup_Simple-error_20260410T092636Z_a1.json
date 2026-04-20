@@ -1,0 +1,139 @@
+{
+  "properties": {
+    "provisioningState": "Succeeded",
+    "createdTime": "2026-04-10T09:15:46.368412Z",
+    "changedTime": "2026-04-10T09:23:23.9547535Z",
+    "state": "Enabled",
+    "version": "08584257938815382095",
+    "accessEndpoint": "https://prod-14.southindia.logic.azure.com:443/workflows/d0e223fc215445e19fd26f18dd4782c7",
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        }
+      },
+      "triggers": {
+        "Recurrence": {
+          "recurrence": {
+            "interval": 1,
+            "frequency": "Minute",
+            "timeZone": "India Standard Time"
+          },
+          "evaluatedRecurrence": {
+            "interval": 1,
+            "frequency": "Minute",
+            "timeZone": "India Standard Time"
+          },
+          "type": "Recurrence"
+        }
+      },
+      "actions": {
+        "Compose": {
+          "runAfter": {},
+          "type": "Compose",
+          "inputs": "@add(1, 'a')"
+        }
+      },
+      "outputs": {}
+    },
+    "parameters": {
+      "$connections": {
+        "value": {}
+      }
+    },
+    "endpointsConfiguration": {
+      "workflow": {
+        "outgoingIpAddresses": [
+          {
+            "address": "104.211.210.192"
+          },
+          {
+            "address": "104.211.218.202"
+          },
+          {
+            "address": "52.172.101.114"
+          },
+          {
+            "address": "52.172.101.181"
+          },
+          {
+            "address": "52.140.5.116"
+          },
+          {
+            "address": "52.172.98.23"
+          },
+          {
+            "address": "52.140.2.252"
+          },
+          {
+            "address": "52.140.0.225"
+          },
+          {
+            "address": "52.140.7.114"
+          },
+          {
+            "address": "52.172.101.204"
+          }
+        ],
+        "accessEndpointIpAddresses": [
+          {
+            "address": "52.140.4.233"
+          },
+          {
+            "address": "52.172.100.99"
+          },
+          {
+            "address": "52.140.5.154"
+          },
+          {
+            "address": "52.140.1.153"
+          },
+          {
+            "address": "52.172.96.103"
+          },
+          {
+            "address": "52.140.2.150"
+          },
+          {
+            "address": "52.172.103.116"
+          },
+          {
+            "address": "52.172.99.31"
+          }
+        ]
+      },
+      "connector": {
+        "outgoingIpAddresses": [
+          {
+            "address": "13.71.127.26"
+          },
+          {
+            "address": "13.71.125.22"
+          },
+          {
+            "address": "20.192.184.32/27"
+          },
+          {
+            "address": "40.78.194.240/28"
+          },
+          {
+            "address": "20.192.152.64/27"
+          },
+          {
+            "address": "20.192.152.96/28"
+          },
+          {
+            "address": "52.172.80.0/26"
+          }
+        ]
+      }
+    }
+  },
+  "id": "/subscriptions/c474dc7c-4f50-490b-a886-847fad508a71/resourceGroups/logicapp-rg/providers/Microsoft.Logic/workflows/Simple-error",
+  "name": "Simple-error",
+  "type": "Microsoft.Logic/workflows",
+  "location": "southindia"
+}
