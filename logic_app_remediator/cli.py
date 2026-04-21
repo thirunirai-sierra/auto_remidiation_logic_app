@@ -54,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
         "-b",
         "--backup-dir",
         default=None,
-        help="Directory for workflow JSON backups (default: cwd)",
+        help="If set, directory for workflow JSON backups before each attempt (omit to skip)",
     )
     p.add_argument(
         "--log-level",
